@@ -231,7 +231,7 @@ const float GILNEAS_BG_DoorPositions[4][8] =
     { 1396.15f, 977.014f, 0.33169f, 6.27043f, 0.0f, 0.0f, 0.006378f, -0.99998f }
 };
 
-const uint32 GILNEAS_BG_TickIntervals[4] = { 0, 12000, 6000, 1000 };
+const Milliseconds GILNEAS_BG_TickIntervals[4] = { 0ms, 12000ms, 6000ms, 1000ms };
 const uint32 GILNEAS_BG_TickPoints[4] = { 0, 10, 10, 30 };
 
 const uint32 GILNEAS_BG_GraveyardIds[GILNEAS_BG_ALL_NODES_COUNT] = { 1736, 1737, 1735, 1739, 1738 };
@@ -310,7 +310,7 @@ public:
     GraveyardStruct const* GetClosestGraveyard(Player* player) override;
 
     bool UpdatePlayerScore(Player* player, uint32 type, uint32 value, bool doAddHonor = true) override;
-    void FillInitialWorldStates(WorldPacket& data)  override;
+    void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& pkt) override;
     void EventPlayerClickedOnFlag(Player* source, GameObject* gameObject) override;
 
     bool AllNodesConrolledByTeam(TeamId teamId) const override;
