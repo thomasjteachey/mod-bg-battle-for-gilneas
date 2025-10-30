@@ -58,6 +58,8 @@ BattlegroundBFG::~BattlegroundBFG() {}
 
 void BattlegroundBFG::PostUpdateImpl(uint32 diff)
 {
+    Battleground::PostUpdateImpl(diff);
+
     if (GetStatus() == STATUS_IN_PROGRESS)
     {
         _bgEvents.Update(diff);
