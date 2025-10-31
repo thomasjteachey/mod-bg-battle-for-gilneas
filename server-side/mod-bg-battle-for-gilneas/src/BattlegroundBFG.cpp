@@ -47,6 +47,8 @@ BattlegroundBFG::BattlegroundBFG()
     _teamScores500Disadvantage[TEAM_HORDE] = false;
     _honorTics = 0;
     _reputationTics = 0;
+    _startingDoorsClosed = false;
+    _startingDoorsOpened = false;
 
     StartMessageIds[BG_STARTING_EVENT_FIRST]  = LANG_BG_BFG_START_TWO_MINUTES;
     StartMessageIds[BG_STARTING_EVENT_SECOND] = LANG_BG_BFG_START_ONE_MINUTE;
@@ -58,80 +60,113 @@ BattlegroundBFG::~BattlegroundBFG() {}
 
 void BattlegroundBFG::PostUpdateImpl(uint32 diff)
 {
-    if (GetStatus() == STATUS_IN_PROGRESS)
+    Battleground::PostUpdateImpl(diff);
+
+    switch (GetStatus())
     {
-        _bgEvents.Update(diff);
-        while (uint32 eventId =_bgEvents.ExecuteEvent())
-            switch (eventId)
+        case STATUS_WAIT_QUEUE:
+        case STATUS_WAIT_JOIN:
+        {
+            if (!_startingDoorsClosed)
             {
-                case BG_BFG_EVENT_UPDATE_BANNER_LIGHTHOUSE:
-                case BG_BFG_EVENT_UPDATE_BANNER_WATERWORKS:
-                case BG_BFG_EVENT_UPDATE_BANNER_MINE:
-                    CreateBanner(eventId - BG_BFG_EVENT_UPDATE_BANNER_LIGHTHOUSE, false);
-                    break;
-                case BG_BFG_EVENT_CAPTURE_LIGHTHOUSE:
-                case BG_BFG_EVENT_CAPTURE_WATERWORKS:
-                case BG_BFG_EVENT_CAPTURE_MINE:
-                {
-                    uint8 node = eventId - BG_BFG_EVENT_CAPTURE_LIGHTHOUSE;
-                    TeamId teamId = _capturePointInfo[node]._state == GILNEAS_BG_NODE_STATUS_ALLY_CONTESTED ? TEAM_ALLIANCE : TEAM_HORDE;
-                    DeleteBanner(node);
-                    _capturePointInfo[node]._ownerTeamId = teamId;
-                    _capturePointInfo[node]._state = teamId == TEAM_ALLIANCE ? GILNEAS_BG_NODE_STATUS_ALLY_OCCUPIED : GILNEAS_BG_NODE_STATUS_HORDE_OCCUPIED;
-                    _capturePointInfo[node]._captured = true;
+                StartingEventCloseDoors();
+                _startingDoorsClosed = true;
+                _startingDoorsOpened = false;
+            }
+            break;
+        }
+        case STATUS_IN_PROGRESS:
+        {
+            if (!_startingDoorsOpened)
+            {
+                StartingEventOpenDoors();
+                _startingDoorsOpened = true;
+            }
 
-                    CreateBanner(node, false);
-                    NodeOccupied(node);
-                    SendNodeUpdate(node);
-
-                    // SendBroadcastText(LANG_BG_BFG_NODE_TAKEN, teamId == TEAM_ALLIANCE ? CHAT_MSG_BG_SYSTEM_ALLIANCE : CHAT_MSG_BG_SYSTEM_HORDE, NULL, teamId == TEAM_ALLIANCE ? LANG_BG_BFG_ALLY : LANG_BG_BFG_HORDE, LANG_BG_BFG_NODE_LIGHTHOUSE + node);
-                    PlaySoundToAll(teamId == TEAM_ALLIANCE ? GILNEAS_BG_SOUND_NODE_CAPTURED_ALLIANCE : GILNEAS_BG_SOUND_NODE_CAPTURED_HORDE);
-                    break;
-                }
-                case BG_BFG_EVENT_ALLIANCE_TICK:
-                case BG_BFG_EVENT_HORDE_TICK:
+            _bgEvents.Update(diff);
+            while (uint32 eventId = _bgEvents.ExecuteEvent())
+                switch (eventId)
                 {
-                    TeamId teamId = TeamId(eventId - BG_BFG_EVENT_ALLIANCE_TICK);
-                    uint8 controlledPoints = _controlledPoints[teamId];
-                    if (controlledPoints == 0)
+                    case BG_BFG_EVENT_UPDATE_BANNER_LIGHTHOUSE:
+                    case BG_BFG_EVENT_UPDATE_BANNER_WATERWORKS:
+                    case BG_BFG_EVENT_UPDATE_BANNER_MINE:
+                        CreateBanner(eventId - BG_BFG_EVENT_UPDATE_BANNER_LIGHTHOUSE, false);
+                        break;
+                    case BG_BFG_EVENT_CAPTURE_LIGHTHOUSE:
+                    case BG_BFG_EVENT_CAPTURE_WATERWORKS:
+                    case BG_BFG_EVENT_CAPTURE_MINE:
                     {
-                        _bgEvents.ScheduleEvent(eventId, 3000ms);
+                        uint8 node = eventId - BG_BFG_EVENT_CAPTURE_LIGHTHOUSE;
+                        TeamId teamId = _capturePointInfo[node]._state == GILNEAS_BG_NODE_STATUS_ALLY_CONTESTED ? TEAM_ALLIANCE : TEAM_HORDE;
+                        DeleteBanner(node);
+                        _capturePointInfo[node]._ownerTeamId = teamId;
+                        _capturePointInfo[node]._state = teamId == TEAM_ALLIANCE ? GILNEAS_BG_NODE_STATUS_ALLY_OCCUPIED : GILNEAS_BG_NODE_STATUS_HORDE_OCCUPIED;
+                        _capturePointInfo[node]._captured = true;
+
+                        CreateBanner(node, false);
+                        NodeOccupied(node);
+                        SendNodeUpdate(node);
+
+                        // SendBroadcastText(LANG_BG_BFG_NODE_TAKEN, teamId == TEAM_ALLIANCE ? CHAT_MSG_BG_SYSTEM_ALLIANCE : CHAT_MSG_BG_SYSTEM_HORDE, NULL, teamId == TEAM_ALLIANCE ? LANG_BG_BFG_ALLY : LANG_BG_BFG_HORDE, LANG_BG_BFG_NODE_LIGHTHOUSE + node);
+                        PlaySoundToAll(teamId == TEAM_ALLIANCE ? GILNEAS_BG_SOUND_NODE_CAPTURED_ALLIANCE : GILNEAS_BG_SOUND_NODE_CAPTURED_HORDE);
                         break;
                     }
-
-                    // uint8 honorRewards = uint8(m_TeamScores[teamId] / _honorTics);
-                    // uint8 reputationRewards = uint8(m_TeamScores[teamId] / _reputationTics);
-                    uint8 information = uint8(m_TeamScores[teamId] / GILNEAS_BG_WARNING_NEAR_VICTORY_SCORE);
-                    m_TeamScores[teamId] += GILNEAS_BG_TickPoints[controlledPoints];
-                    if (m_TeamScores[teamId] > GILNEAS_BG_MAX_TEAM_SCORE)
-                        m_TeamScores[teamId] = GILNEAS_BG_MAX_TEAM_SCORE;
-
-                    // if (honorRewards < uint8(m_TeamScores[teamId] / _honorTics))
-                    //     RewardHonorToTeam(GetBonusHonorFromKill(1), teamId);
-                    // if (reputationRewards < uint8(m_TeamScores[teamId] / _reputationTics))
-                    //     RewardReputationToTeam(teamId == TEAM_ALLIANCE ? 509 : 510, 10, teamId);
-
-                    if (information < uint8(m_TeamScores[teamId] / GILNEAS_BG_WARNING_NEAR_VICTORY_SCORE))
+                    case BG_BFG_EVENT_ALLIANCE_TICK:
+                    case BG_BFG_EVENT_HORDE_TICK:
                     {
-                        SendBroadcastText(teamId == TEAM_ALLIANCE ? LANG_BG_BFG_A_NEAR_VICTORY : LANG_BG_BFG_H_NEAR_VICTORY, CHAT_MSG_BG_SYSTEM_NEUTRAL);
-                        PlaySoundToAll(GILNEAS_BG_SOUND_NEAR_VICTORY);
+                        TeamId teamId = TeamId(eventId - BG_BFG_EVENT_ALLIANCE_TICK);
+                        uint8 controlledPoints = _controlledPoints[teamId];
+                        if (controlledPoints == 0)
+                        {
+                            _bgEvents.ScheduleEvent(eventId, 3000ms);
+                            break;
+                        }
+
+                        // uint8 honorRewards = uint8(m_TeamScores[teamId] / _honorTics);
+                        // uint8 reputationRewards = uint8(m_TeamScores[teamId] / _reputationTics);
+                        uint8 information = uint8(m_TeamScores[teamId] / GILNEAS_BG_WARNING_NEAR_VICTORY_SCORE);
+                        m_TeamScores[teamId] += GILNEAS_BG_TickPoints[controlledPoints];
+                        if (m_TeamScores[teamId] > GILNEAS_BG_MAX_TEAM_SCORE)
+                            m_TeamScores[teamId] = GILNEAS_BG_MAX_TEAM_SCORE;
+
+                        // if (honorRewards < uint8(m_TeamScores[teamId] / _honorTics))
+                        //     RewardHonorToTeam(GetBonusHonorFromKill(1), teamId);
+                        // if (reputationRewards < uint8(m_TeamScores[teamId] / _reputationTics))
+                        //     RewardReputationToTeam(teamId == TEAM_ALLIANCE ? 509 : 510, 10, teamId);
+
+                        if (information < uint8(m_TeamScores[teamId] / GILNEAS_BG_WARNING_NEAR_VICTORY_SCORE))
+                        {
+                            SendBroadcastText(teamId == TEAM_ALLIANCE ? LANG_BG_BFG_A_NEAR_VICTORY : LANG_BG_BFG_H_NEAR_VICTORY, CHAT_MSG_BG_SYSTEM_NEUTRAL);
+                            PlaySoundToAll(GILNEAS_BG_SOUND_NEAR_VICTORY);
+                        }
+
+                        UpdateWorldState(teamId == TEAM_ALLIANCE ? GILNEAS_BG_OP_RESOURCES_ALLY : GILNEAS_BG_OP_RESOURCES_HORDE, m_TeamScores[teamId]);
+                        if (m_TeamScores[teamId] > m_TeamScores[GetOtherTeamId(teamId)] + 500)
+                            _teamScores500Disadvantage[GetOtherTeamId(teamId)] = true;
+                        if (m_TeamScores[teamId] >= GILNEAS_BG_MAX_TEAM_SCORE)
+                            EndBattleground(teamId);
+
+                        _bgEvents.ScheduleEvent(eventId, GILNEAS_BG_TickIntervals[controlledPoints]);
+                        break;
                     }
-
-                    UpdateWorldState(teamId == TEAM_ALLIANCE ? GILNEAS_BG_OP_RESOURCES_ALLY : GILNEAS_BG_OP_RESOURCES_HORDE, m_TeamScores[teamId]);
-                    if (m_TeamScores[teamId] > m_TeamScores[GetOtherTeamId(teamId)] + 500)
-                        _teamScores500Disadvantage[GetOtherTeamId(teamId)] = true;
-                    if (m_TeamScores[teamId] >= GILNEAS_BG_MAX_TEAM_SCORE)
-                        EndBattleground(teamId);
-
-                    _bgEvents.ScheduleEvent(eventId, GILNEAS_BG_TickIntervals[controlledPoints]);
-                    break;
                 }
-            }
+            break;
+        }
+        case STATUS_WAIT_LEAVE:
+        {
+            _startingDoorsClosed = false;
+            _startingDoorsOpened = false;
+            break;
+        }
+        default:
+            break;
     }
 }
 
 void BattlegroundBFG::StartingEventCloseDoors()
 {
+    Battleground::StartingEventCloseDoors();
+
     // despawn banners, auras and buffs
     for (uint32 obj = GILNEAS_BG_OBJECT_BANNER_NEUTRAL; obj < static_cast<uint8>(GILNEAS_BG_DYNAMIC_NODES_COUNT) * GILNEAS_BG_OBJECT_PER_NODE; ++obj)
         SpawnBGObject(obj, RESPAWN_ONE_DAY);
@@ -155,6 +190,8 @@ void BattlegroundBFG::StartingEventCloseDoors()
 
 void BattlegroundBFG::StartingEventOpenDoors()
 {
+    Battleground::StartingEventOpenDoors();
+
     // spawn neutral banners
     for (uint32 banner = GILNEAS_BG_OBJECT_BANNER_NEUTRAL, i = 0; i < GILNEAS_BG_DYNAMIC_NODES_COUNT; banner += GILNEAS_BG_OBJECT_PER_NODE, ++i)
         SpawnBGObject(banner, RESPAWN_IMMEDIATELY);
@@ -421,6 +458,8 @@ void BattlegroundBFG::Init()
     Battleground::Init();
 
     _bgEvents.Reset();
+    _startingDoorsClosed = false;
+    _startingDoorsOpened = false;
 
     // _honorTics = BattlegroundMgr::IsBGWeekend(GetBgTypeID()) ? BG_AB_HONOR_TICK_WEEKEND : BG_AB_HONOR_TICK_NORMAL;
     // _reputationTics = BattlegroundMgr::IsBGWeekend(GetBgTypeID()) ? BG_AB_REP_TICK_WEEKEND : BG_AB_REP_TICK_NORMAL;
@@ -440,6 +479,8 @@ void BattlegroundBFG::EndBattleground(TeamId winnerTeamId)
     RewardHonorToTeam(GetBonusHonorFromKill(1), TEAM_ALLIANCE);
     Battleground::EndBattleground(winnerTeamId);
     _bgEvents.Reset();
+    _startingDoorsClosed = false;
+    _startingDoorsOpened = false;
 }
 
 GraveyardStruct const* BattlegroundBFG::GetClosestGraveyard(Player* player)
