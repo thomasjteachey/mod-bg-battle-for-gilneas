@@ -347,6 +347,8 @@ private:
     uint32 _reputationTics;
     uint8 _controlledPoints[PVP_TEAMS_COUNT] {};
     bool _teamScores500Disadvantage[PVP_TEAMS_COUNT] {};
+    bool _startingDoorsClosed = false;
+    bool _startingDoorsOpened = false;
 
 //     void AddPlayer(Player* player);
 //     void StartingEventCloseDoors();
